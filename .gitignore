@@ -1,6 +1,8 @@
 ### Project ###
 /archive/
 /data/
+/models/
+model.pt
 todo.md
 
 
