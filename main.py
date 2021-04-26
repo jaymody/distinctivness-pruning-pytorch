@@ -41,19 +41,22 @@ class CNN(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 20, kernel_size=5)
         self.pool1 = nn.MaxPool2d(2)
+        self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv2d(20, 40, kernel_size=5)
         self.pool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
         self.dropout = nn.Dropout2d(0.25)
         self.fc1 = nn.Linear(640, 400)
+        self.relu3 = nn.ReLU()
         self.fc2 = nn.Linear(400, 10)
 
     def forward(self, x):
         batch_size = x.shape[0]
-        x = F.relu(self.pool1(self.conv1(x)))
-        x = F.relu(self.pool2(self.conv2(x)))
+        x = self.relu1(self.pool1(self.conv1(x)))
+        x = self.relu2(self.pool2(self.conv2(x)))
         x = self.dropout(x)
         x = x.reshape(batch_size, -1)
-        x = F.relu(self.fc1(x))
+        x = self.relu3(self.fc1(x))
         x = self.fc2(x)
         return x
 
