@@ -10,6 +10,7 @@ from torchvision.transforms import Compose, ToTensor, Normalize
 
 # hyperparams
 config = dict(
+    model_path="model.pt",
     lr=1e-3,
     weight_decay=1e-6,
     n_epochs=8,
@@ -29,6 +30,10 @@ def set_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
+
+
+def get_transform():
+    return Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 
 
 class CNN(nn.Module):
@@ -90,33 +95,30 @@ def eval_fn(model, val_loader, criterion):
         y = y.to(device)
         batch_size = x.size(0)
 
-        # feed forward
         with torch.no_grad():
+            # feed forward
             output = model(x)
 
-        # compute loss
-        loss = criterion(output, y)
-        val_loss += loss.item() / batch_size
+            # compute loss
+            loss = criterion(output, y)
+            val_loss += loss.item() / batch_size
 
-        # get predictions
-        pred = torch.argmax(output, axis=-1)
+            # get predictions
+            pred = torch.argmax(output, axis=-1)
 
-        # add number of correct and total predictions made
-        n_correct += torch.sum(pred == y).item()
-        n_total += batch_size
+            # add number of correct and total predictions made
+            n_correct += torch.sum(pred == y).item()
+            n_total += batch_size
 
     val_acc = n_correct / n_total
     return val_loss, val_acc
 
 
 def train():
-    # load datasets
-    transform = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+    # load train dataset
+    transform = get_transform()
     train_dataset = MNIST(
         root="data/mnist/train", train=True, download=True, transform=transform
-    )
-    test_dataset = MNIST(
-        root="data/mnist/test", train=False, download=True, transform=transform
     )
 
     # train/validation split
@@ -135,14 +137,6 @@ def train():
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=config["batch_size"],
-        num_workers=config["num_workers"],
-        shuffle=False,
-        pin_memory=True,
-        drop_last=False,
-    )
-    test_loader = DataLoader(
-        test_dataset,
         batch_size=config["batch_size"],
         num_workers=config["num_workers"],
         shuffle=False,
@@ -178,11 +172,42 @@ def train():
             f"val_acc {val_acc:.3f}\t"
         )
 
+    # save model
+    torch.save(model.state_dict(), config["model_path"])
+
+
+def evaluate():
+    # load test dataset
+    transform = get_transform()
+    test_dataset = MNIST(
+        root="data/mnist/test", train=False, download=True, transform=transform
+    )
+
+    # data loader
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
+        shuffle=False,
+        pin_memory=True,
+        drop_last=False,
+    )
+
+    # load model
+    model = CNN()
+    model.load_state_dict(torch.load(config["model_path"]))
+    model.to(device)
+
+    # loss function
+    criterion = nn.CrossEntropyLoss()
+
     # test
-    _, test_acc = eval_fn(model, test_loader, criterion)
-    print(f"\nAccuracy on Test Set: {test_acc:.3f}")
+    test_loss, test_acc = eval_fn(model, test_loader, criterion)
+    print(f"Test Accuracy: {test_acc:.3f}")
+    print(f"Test Loss: {test_loss:.3f}")
 
 
 if __name__ == "__main__":
     set_seed(config["seed"])
     train()
+    evaluate()
