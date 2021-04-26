@@ -1,6 +1,34 @@
+import random
+
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets import MNIST
+from torchvision.transforms import Compose, ToTensor, Normalize
+
+# hyperparams
+config = dict(
+    lr=1e-3,
+    weight_decay=1e-6,
+    n_epochs=8,
+    num_workers=0,
+    batch_size=64,
+    train_test_ratio=0.8,
+    seed=1234,
+)
+
+# get device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
 
 
 class CNN(nn.Module):
@@ -25,7 +53,7 @@ class CNN(nn.Module):
         return x
 
 
-def train_fn(model, train_loader, criterion, optimizer, device):
+def train_fn(model, train_loader, criterion, optimizer):
     model.train()
     train_loss = 0
     for batch in train_loader:
@@ -50,7 +78,7 @@ def train_fn(model, train_loader, criterion, optimizer, device):
     return train_loss
 
 
-def eval_fn(model, val_loader, criterion, device):
+def eval_fn(model, val_loader, criterion):
     model.eval()
     val_loss = 0
     n_correct = 0
@@ -81,33 +109,7 @@ def eval_fn(model, val_loader, criterion, device):
     return val_loss, val_acc
 
 
-def main():
-    # imports
-    import random
-    import numpy as np
-    from torch.utils.data import DataLoader, random_split
-    from torchvision.datasets import MNIST
-    from torchvision.transforms import Compose, ToTensor, Normalize
-
-    # hyperparams
-    lr = 1e-3
-    weight_decay = 1e-6
-    n_epochs = 8
-    num_workers = 0
-    batch_size = 64
-    train_test_ratio = 0.8
-    seed = 1234
-
-    # get device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # set seed for deterministic results
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-
+def train():
     # load datasets
     transform = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
     train_dataset = MNIST(
@@ -118,31 +120,31 @@ def main():
     )
 
     # train/validation split
-    train_size = int(len(train_dataset) * train_test_ratio)
+    train_size = int(len(train_dataset) * config["train_test_ratio"])
     val_size = len(train_dataset) - train_size
     train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
 
     # data loaders
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
         shuffle=True,
         pin_memory=True,
         drop_last=False,
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
         shuffle=False,
         pin_memory=True,
         drop_last=False,
     )
     test_loader = DataLoader(
         test_dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
         shuffle=False,
         pin_memory=True,
         drop_last=False,
@@ -156,28 +158,31 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"]
+    )
 
     # train loop
-    for epoch in range(n_epochs):
+    for epoch in range(config["n_epochs"]):
         # train
-        train_loss = train_fn(model, train_loader, criterion, optimizer, device)
+        train_loss = train_fn(model, train_loader, criterion, optimizer)
 
         # eval
-        val_loss, val_acc = eval_fn(model, val_loader, criterion, device)
+        val_loss, val_acc = eval_fn(model, val_loader, criterion)
 
         # log results
         print(
-            f"Epoch {epoch+1}/{n_epochs}\t"
+            f"Epoch {epoch+1}/{config['n_epochs']}\t"
             f"loss {train_loss:.3f}\t"
             f"val_loss {val_loss:.3f}\t"
             f"val_acc {val_acc:.3f}\t"
         )
 
     # test
-    _, test_acc = eval_fn(model, test_loader, criterion, device)
+    _, test_acc = eval_fn(model, test_loader, criterion)
     print(f"\nAccuracy on Test Set: {test_acc:.3f}")
 
 
 if __name__ == "__main__":
-    main()
+    set_seed(config["seed"])
+    train()
